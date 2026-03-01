@@ -1,0 +1,201 @@
+---
+title: "Forecasting Daily Bike Rental Demand Using Time Series Models"
+author: "Paul Trimby"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(tsibble)
+library(feasts)
+library(fable)
+library(lubridate)
+library(ggtime)
+```
+
+# 1. Introduction
+
+This report presents a time series analysis of daily bike rental demand using data from the Capital Bikeshare system (2011–2012). The objective is to explore underlying patterns in the data and develop a forecasting model capable of predicting future rental demand.
+
+**Data Source:**  
+https://archive.ics.uci.edu/ml/datasets/bike+sharing+dataset  
+
+**Reference:**  
+Fanaee-T, H., & Gama, J. (2013). *Event labeling combining ensemble detectors and background knowledge*. Progress in Artificial Intelligence.
+
+---
+
+# 2. Data Preparation and Exploration
+
+## 2.1 Load the Data
+
+```{r}
+bike_data <- read_csv("day.csv")
+```
+
+## 2.2 Convert to Time Series Format
+
+```{r}
+bike_ts <- bike_data %>%
+  mutate(dteday = as.Date(dteday)) %>%
+  as_tsibble(index = dteday)
+
+glimpse(bike_ts)
+```
+
+The dataset contains 731 daily observations, including total rental counts and weather-related variables.
+
+## 2.3 Visual Exploration
+
+```{r}
+bike_ts %>%
+  ggplot(aes(x = dteday, y = cnt)) +
+  geom_line() +
+  labs(
+    title = "Daily Bike Rental Demand",
+    x = "Date",
+    y = "Total Rentals"
+  )
+```
+
+The time plot reveals:
+- An upward trend from 2011 to 2012  
+- Clear weekly fluctuations  
+- Increasing variability over time  
+
+These features suggest the presence of both trend and seasonality.
+
+---
+
+# 3. Decomposition and Stationarity Assessment
+
+## 3.1 STL Decomposition
+
+```{r}
+bike_decomp <- bike_ts %>%
+  model(STL(cnt))
+
+components(bike_decomp) %>%
+  autoplot()
+```
+
+The STL decomposition confirms:
+- A strong upward trend  
+- Clear and stable weekly seasonality  
+- Residual variation around these components  
+
+## 3.2 Autocorrelation Analysis
+
+```{r}
+bike_ts %>%
+  ACF(cnt) %>%
+  autoplot()
+```
+
+The ACF plot shows significant autocorrelation, indicating that the series is not stationary and requires differencing before modelling.
+
+---
+
+# 4. ARIMA Model Fitting
+
+## 4.1 Fit Seasonal ARIMA Model
+
+```{r}
+bike_fit <- bike_ts %>%
+  model(ARIMA(cnt))
+
+report(bike_fit)
+```
+
+The selected model:
+
+ARIMA(1,1,1)(1,0,2)[7]
+
+Interpretation:
+
+- d = 1 → First differencing removes the upward trend  
+- [7] → Weekly seasonality (7-day cycle)  
+- D = 0 → Seasonal pattern is stable and does not require seasonal differencing  
+
+Most coefficients are statistically significant, suggesting meaningful short-term and seasonal dependencies.
+
+---
+
+# 5. Model Diagnostics
+
+```{r}
+bike_fit %>%
+  gg_tsresiduals()
+```
+
+Residual diagnostics indicate:
+
+- No visible trend in residuals  
+- No significant autocorrelation remaining  
+- Approximately normal distribution of errors  
+
+This suggests the model residuals behave like white noise and that the ARIMA model adequately captures the structure of the data.
+
+---
+
+# 6. Forecasting
+
+```{r}
+bike_fc <- bike_fit %>%
+  forecast(h = "30 days")
+
+autoplot(bike_fc, bike_ts)
+```
+
+The 30-day forecast maintains the observed weekly seasonal pattern. Prediction intervals widen over time, reflecting increasing uncertainty in longer-term forecasts.
+
+---
+
+# 7. Findings and Conclusion
+
+This analysis demonstrates that daily bike rental demand exhibits both trend and strong weekly seasonality.
+
+The ARIMA(1,1,1)(1,0,2)[7] model successfully captures:
+
+- Long-term growth through first differencing  
+- Stable weekly seasonality  
+- Short-term temporal dependencies  
+
+Residual diagnostics confirm model adequacy, and the generated forecasts provide realistic short-term projections with appropriate uncertainty estimates.
+
+Overall, this project demonstrates a structured and diagnostic-driven time series modelling workflow, from exploration and decomposition to validation and forecasting.
+
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
